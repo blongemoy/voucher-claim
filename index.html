@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MoonClaim - Web3 Voucher Redemption</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Orbitron', sans-serif;
+      background: linear-gradient(to right, #141e30, #243b55);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 2em;
+      margin-bottom: 5px;
+    }
+
+    h2 {
+      font-size: 1.2em;
+      font-weight: normal;
+      color: #ccc;
+      margin-bottom: 30px;
+    }
+
+    button, input {
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    input {
+      padding: 10px;
+      width: 300px;
+      border-radius: 8px;
+      border: none;
+      margin: 10px 0;
+      font-size: 16px;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #4caf50;
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #388e3c;
+    }
+
+    #voucherForm {
+      display: none;
+      margin-top: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+
+    #resultMsg {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    .wallet-address {
+      font-size: 14px;
+      color: #aaa;
+      word-break: break-all;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>🚀 MoonClaim</h1>
+  <h2>Redeem your code. Claim your rewards. Powered by Web3.</h2>
+  <button onclick="connectWallet()">🔐 Login dengan MetaMask</button>
+
+  <div id="voucherForm">
+    <p><strong>Wallet:</strong></p>
+    <p class="wallet-address" id="walletAddress"></p>
+    <input type="text" id="voucherInput" placeholder="Masukkan kode voucher" />
+    <button onclick="submitVoucher()">🎁 Klaim Voucher</button>
+    <p id="resultMsg"></p>
+  </div>
+
+  <script>
+    let userWallet = "";
+
+    const SUPABASE_URL = "https://pozpkpvokqtqqdtfyehr.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvenBrcHZva3F0cXFkdGZ5ZWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5ODQ5OTksImV4cCI6MjA2NzU2MDk5OX0.fbWQlRm6sXqF30LvSIJHdULrS281xGT2kd6nSqprNhw";
+    const TABLE_NAME = "vouchers";
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          userWallet = accounts[0];
+          document.getElementById("walletAddress").innerText = userWallet;
+          document.getElementById("voucherForm").style.display = "block";
+        } catch (err) {
+          alert("Gagal login MetaMask: " + err.message);
+        }
+      } else {
+        alert("MetaMask tidak ditemukan. Silakan install terlebih dahulu.");
+      }
+    }
+
+    async function submitVoucher() {
+      const code = document.getElementById("voucherInput").value.trim();
+      const resultMsg = document.getElementById("resultMsg");
+      resultMsg.innerText = "🔄 Memeriksa kode...";
+
+      if (!code) {
+        resultMsg.innerText = "❌ Kode voucher tidak boleh kosong.";
+        return;
+      }
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE_NAME}?code=eq.${code}`, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        }
+      });
+
+      const data = await res.json();
+      if (data.length === 0) {
+        resultMsg.innerText = "❌ Kode voucher tidak ditemukan.";
+        return;
+      }
+
+      const voucher = data[0];
+      if (voucher.used_by) {
+        resultMsg.innerText = `❌ Kode sudah diklaim oleh wallet: ${voucher.used_by}`;
+        return;
+      }
+
+      const update = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE_NAME}?code=eq.${code}`, {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+          used_by: userWallet,
+          used_at: new Date().toISOString()
+        })
+      });
+
+      const updated = await update.json();
+      if (updated.length > 0) {
+        resultMsg.innerHTML = "✅ <strong>Voucher berhasil diklaim!</strong> 🎉";
+      } else {
+        resultMsg.innerText = "❌ Gagal mengklaim voucher.";
+      }
+    }
+  </script>
+</body>
+</html>
