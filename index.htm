@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Voucher Claim - MetaMask</title>
+  <meta charset="UTF-8">
+</head>
+<body>
+  <h2>🔐 Login Wallet & Klaim Voucher</h2>
+  <button onclick="connectWallet()">Login dengan MetaMask</button>
+
+  <div id="voucherForm" style="display:none; margin-top:20px;">
+    <p><strong>Wallet:</strong> <span id="walletAddress"></span></p>
+    <input type="text" id="voucherInput" placeholder="Masukkan kode voucher" />
+    <button onclick="submitVoucher()">Klaim Voucher</button>
+    <p id="resultMsg" style="font-weight:bold;"></p>
+  </div>
+
+  <script>
+    let userWallet = "";
+
+    // GANTI INI DENGAN PUNYAMU
+    const SUPABASE_URL = "https://pozpkpvokqtqqdtfyehr.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvenBrcHZva3F0cXFkdGZ5ZWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5ODQ5OTksImV4cCI6MjA2NzU2MDk5OX0.fbWQlRm6sXqF30LvSIJHdULrS281xGT2kd6nSqprNhw";
+    const TABLE_NAME = "vouchers";
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          userWallet = accounts[0];
+          document.getElementById("walletAddress").innerText = userWallet;
+          document.getElementById("voucherForm").style.display = "block";
+        } catch (err) {
+          alert("Gagal login MetaMask: " + err.message);
+        }
+      } else {
+        alert("MetaMask tidak ditemukan. Silakan install terlebih dahulu.");
+      }
+    }
+
+    async function submitVoucher() {
+      const code = document.getElementById("voucherInput").value.trim();
+      const resultMsg = document.getElementById("resultMsg");
+      resultMsg.innerText = "🔄 Memeriksa kode...";
+
+      if (!code) {
+        resultMsg.innerText = "❌ Kode voucher tidak boleh kosong.";
+        return;
+      }
+
+      // 1. Cek apakah kode valid dan belum dipakai
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE_NAME}?code=eq.${code}`, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        }
+      });
+
+      const data = await res.json();
+      if (data.length === 0) {
+        resultMsg.innerText = "❌ Kode voucher tidak ditemukan.";
+        return;
+      }
+
+      const voucher = data[0];
+      if (voucher.used_by) {
+        resultMsg.innerText = `❌ Kode sudah diklaim oleh wallet: ${voucher.used_by}`;
+        return;
+      }
+
+      // 2. Tandai sebagai sudah digunakan
+      const update = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE_NAME}?code=eq.${code}`, {
+        method: "PATCH",
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+          used_by: userWallet,
+          used_at: new Date().toISOString()
+        })
+      });
+
+      const updated = await update.json();
+      if (updated.length > 0) {
+        resultMsg.innerText = "✅ Voucher berhasil diklaim!";
+      } else {
+        resultMsg.innerText = "❌ Gagal mengklaim voucher.";
+      }
+    }
+  </script>
+</body>
+</html>
